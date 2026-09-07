@@ -58,6 +58,7 @@ vi.mock("../src/lib/quota-export.js", async () => {
 });
 
 import {
+  createTuiQuotaClient,
   getTuiSessionModelMeta,
   loadTuiHomeBottomStatus,
   loadTuiHomeCompactStatus,
@@ -601,6 +602,33 @@ describe("tui runtime helpers", () => {
     });
   });
 
+  it("preserves runtime provider fields in the TUI state fallback", async () => {
+    const client = createTuiQuotaClient({
+      client: { config: {} },
+      state: {
+        provider: [
+          { id: "openai", baseProviderID: "openai", name: "OpenAI" },
+          { id: "openai-Work", baseProviderID: "openai", name: "Work" },
+          { id: "vendor-alias", baseProviderID: "anthropic" },
+          { id: "" },
+          null,
+          { name: "missing id" },
+        ],
+        path: { worktree: worktreeDir, directory: nestedDir },
+      },
+    } as never);
+
+    await expect(client.config.providers()).resolves.toEqual({
+      data: {
+        providers: [
+          { id: "openai", baseProviderID: "openai", name: "OpenAI" },
+          { id: "openai-Work", baseProviderID: "openai", name: "Work" },
+          { id: "vendor-alias", baseProviderID: "anthropic" },
+        ],
+      },
+    });
+  });
+
   it("prefers api.client.config.providers over sidebar state providers", async () => {
     writeFileSync(
       join(worktreeDir, "opencode.json"),
@@ -615,14 +643,18 @@ describe("tui runtime helpers", () => {
     );
 
     const runtimeProviders = vi.fn().mockResolvedValue({
-      data: { providers: [{ id: "copilot" }, { id: "openai" }] },
+      data: {
+        providers: [
+          { id: "copilot" },
+          { id: "openai" },
+          { id: "openai-sdk", baseProviderID: "openai" },
+        ],
+      },
     });
 
-    collectQuotaRenderData.mockImplementation(async ({ client }) => {
-      const response = await client.config.providers();
-      expect(response).toEqual({
-        data: { providers: [{ id: "copilot" }, { id: "openai" }] },
-      });
+    collectQuotaRenderData.mockImplementation(async ({ providers }) => {
+      expect(providers?.map((provider) => provider.id)).toContain("openai-sdk");
+      expect(providers?.map((provider) => provider.id)).not.toContain("openai-state");
       return {
         active: [],
         data: {
@@ -637,7 +669,7 @@ describe("tui runtime helpers", () => {
     const panel = await loadSidebarPanel({
       api: {
         state: {
-          provider: [{ id: "stale-state-provider" }],
+          provider: [{ id: "openai-state", baseProviderID: "openai" }],
           path: {
             worktree: worktreeDir,
             directory: nestedDir,
@@ -657,6 +689,69 @@ describe("tui runtime helpers", () => {
 
     expect(panel).toEqual({ status: "ready", lines: ["Quota line"] });
     expect(runtimeProviders).toHaveBeenCalledOnce();
+  });
+
+  it("rediscovers provider topology across operations on the same TUI API", async () => {
+    writeFileSync(
+      join(worktreeDir, "opencode.json"),
+      JSON.stringify({
+        experimental: {
+          quotaToast: {
+            enabled: true,
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const runtimeProviders = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: { providers: [{ id: "openai-A", baseProviderID: "openai" }] },
+      })
+      .mockResolvedValueOnce({
+        data: { providers: [{ id: "openai-B", baseProviderID: "openai" }] },
+      });
+    const observedProviderIds: string[][] = [];
+    collectQuotaRenderData.mockImplementation(async ({ providers }) => {
+      observedProviderIds.push(providers?.map((provider) => provider.id) ?? []);
+      return {
+        active: [],
+        data: {
+          entries: [],
+          errors: [],
+          sessionTokens: undefined,
+        },
+      };
+    });
+    buildSidebarQuotaPanelLines.mockReturnValue(["Quota line"]);
+
+    const api = {
+      state: {
+        provider: [{ id: "stale-state-provider" }],
+        path: {
+          worktree: worktreeDir,
+          directory: nestedDir,
+        },
+        session: {
+          messages: () => [],
+        },
+      },
+      client: {
+        config: {
+          providers: runtimeProviders,
+        },
+      },
+    } as never;
+
+    await loadSidebarPanel({ api, sessionID: "session-topology" });
+    await loadSidebarPanel({ api, sessionID: "session-topology" });
+
+    expect(observedProviderIds[0]).toContain("openai-A");
+    expect(observedProviderIds[0]).not.toContain("openai-B");
+    expect(observedProviderIds[1]).toContain("openai-B");
+    expect(observedProviderIds[1]).not.toContain("openai-A");
+    expect(runtimeProviders).toHaveBeenCalledTimes(2);
   });
 
   it("normalizes placeholder TUI session route params as unavailable", () => {

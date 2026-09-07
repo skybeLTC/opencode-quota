@@ -340,7 +340,13 @@ export interface QuotaProviderMatchContext {
 export interface QuotaProviderContext {
   client: {
     config: {
-      providers: () => Promise<{ data?: { providers: Array<{ id: string }> } }>;
+      /**
+       * Runtime provider discovery. `baseProviderID`/`name` are optional so the
+       * generated OpenCode SDK typings, which may omit them, stay assignable.
+       */
+      providers: () => Promise<{
+        data?: { providers: Array<{ id: string; baseProviderID?: string; name?: string }> };
+      }>;
       get: () => Promise<{ data?: { model?: string } }>;
     };
   };

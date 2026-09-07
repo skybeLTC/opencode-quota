@@ -186,7 +186,12 @@ export type ResolvedOpenAIOAuth =
   | { state: "none" }
   | {
       state: "configured";
-      sourceKey: OpenAIAuthSourceKey;
+      /**
+       * Exact auth.json key that won resolution. Canonical OpenAI resolution
+       * uses OPENAI_AUTH_SOURCE_KEYS; inherited provider instances resolve
+       * against their own exact configured provider id only.
+       */
+      sourceKey: string;
       accessToken: string;
       refreshToken?: string;
       expiresAt?: number;
@@ -194,11 +199,27 @@ export type ResolvedOpenAIOAuth =
       accountId?: string;
     };
 
+/**
+ * Reads one exact auth.json key without widening AuthData with an index
+ * signature. Inherited provider instance ids are runtime values, so they can
+ * never be part of the statically declared AuthData shape.
+ */
+function readAuthEntryByExactKey(
+  auth: AuthData | null | undefined,
+  sourceKey: string,
+): OpenAIOAuthData | undefined {
+  if (!auth) return undefined;
+  const entry = (auth as Record<string, unknown>)[sourceKey];
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+  return entry as OpenAIOAuthData;
+}
+
 function getOpenAIOAuthEntry(
   auth: AuthData | null | undefined,
-): { sourceKey: OpenAIAuthSourceKey; entry: OpenAIOAuthData; accessToken: string } | null {
-  for (const sourceKey of OPENAI_AUTH_SOURCE_KEYS) {
-    const entry = auth?.[sourceKey];
+  sourceKeys: readonly string[],
+): { sourceKey: string; entry: OpenAIOAuthData; accessToken: string } | null {
+  for (const sourceKey of sourceKeys) {
+    const entry = readAuthEntryByExactKey(auth, sourceKey);
     if (!entry || entry.type !== "oauth") {
       continue;
     }
@@ -212,8 +233,16 @@ function getOpenAIOAuthEntry(
   return null;
 }
 
-export function resolveOpenAIOAuth(auth: AuthData | null | undefined): ResolvedOpenAIOAuth {
-  const resolved = getOpenAIOAuthEntry(auth);
+/**
+ * Resolves the OpenAI OAuth credential from an explicit, ordered list of exact
+ * auth.json keys. Callers that pass instance-scoped keys never fall back to the
+ * canonical OpenAI keys.
+ */
+export function resolveOpenAIOAuthForSourceKeys(
+  auth: AuthData | null | undefined,
+  sourceKeys: readonly string[],
+): ResolvedOpenAIOAuth {
+  const resolved = getOpenAIOAuthEntry(auth, sourceKeys);
   if (!resolved) {
     return { state: "none" };
   }
@@ -236,46 +265,69 @@ export function resolveOpenAIOAuth(auth: AuthData | null | undefined): ResolvedO
   };
 }
 
+/** Canonical OpenAI resolution across the historical OpenCode auth key aliases. */
+export function resolveOpenAIOAuth(auth: AuthData | null | undefined): ResolvedOpenAIOAuth {
+  return resolveOpenAIOAuthForSourceKeys(auth, OPENAI_AUTH_SOURCE_KEYS);
+}
+
 export function hasOpenAIOAuth(auth: AuthData | null | undefined): boolean {
   return resolveOpenAIOAuth(auth).state === "configured";
 }
 
 export async function resolveOpenAIAuthIdentity(params?: {
   maxAgeMs?: number;
+  /** Exact auth.json keys to resolve; defaults to the canonical OpenAI keys. */
+  authSourceKeys?: readonly string[];
+  /** Identity namespace; defaults to the canonical "openai" provider id. */
+  providerId?: string;
 }): Promise<ResolvedAuthIdentity | null> {
   const auth = await readAuthFileCached({
     maxAgeMs: Math.max(0, params?.maxAgeMs ?? DEFAULT_OPENAI_AUTH_CACHE_MAX_AGE_MS),
   });
-  const resolved = resolveOpenAIOAuth(auth);
+  const resolved = resolveOpenAIOAuthForSourceKeys(
+    auth,
+    params?.authSourceKeys ?? OPENAI_AUTH_SOURCE_KEYS,
+  );
   if (resolved.state !== "configured") return null;
 
+  const providerId = params?.providerId ?? "openai";
   if (resolved.accountId) {
     return deriveResolvedAuthIdentity({
-      providerId: "openai",
+      providerId,
       principal: { kind: "stable-id", value: resolved.accountId },
     });
   }
   const credential = resolved.refreshToken ?? resolved.accessToken;
   return deriveResolvedAuthIdentity({
-    providerId: "openai",
+    providerId,
     principal: { kind: "credential", value: credential },
   });
 }
 
-export async function hasOpenAIOAuthCached(params?: { maxAgeMs?: number }): Promise<boolean> {
+export async function hasOpenAIOAuthCached(params?: {
+  maxAgeMs?: number;
+  /** Exact auth.json keys to resolve; defaults to the canonical OpenAI keys. */
+  authSourceKeys?: readonly string[];
+}): Promise<boolean> {
   const auth = await readAuthFileCached({
     maxAgeMs: Math.max(0, params?.maxAgeMs ?? DEFAULT_OPENAI_AUTH_CACHE_MAX_AGE_MS),
   });
-  return hasOpenAIOAuth(auth);
+  return (
+    resolveOpenAIOAuthForSourceKeys(auth, params?.authSourceKeys ?? OPENAI_AUTH_SOURCE_KEYS)
+      .state === "configured"
+  );
 }
 
 export async function queryOpenAIQuota(
-  options: { requestTimeoutMs?: number } = {},
+  options: { requestTimeoutMs?: number; authSourceKeys?: readonly string[] } = {},
 ): Promise<OpenAIResult> {
   const auth = await readAuthFileCached({
     maxAgeMs: DEFAULT_OPENAI_AUTH_CACHE_MAX_AGE_MS,
   });
-  const resolvedAuth = resolveOpenAIOAuth(auth);
+  const resolvedAuth = resolveOpenAIOAuthForSourceKeys(
+    auth,
+    options.authSourceKeys ?? OPENAI_AUTH_SOURCE_KEYS,
+  );
   if (resolvedAuth.state !== "configured") return null;
 
   if (resolvedAuth.expiresAt && resolvedAuth.expiresAt < Date.now()) {

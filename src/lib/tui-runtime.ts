@@ -44,6 +44,10 @@ import {
   createQuotaRuntimeRequestContext,
   resolveQuotaRuntimeContext,
 } from "./quota-runtime-context.js";
+import {
+  narrowRuntimeProviderDescriptor,
+  type RuntimeProviderDescriptor,
+} from "./runtime-provider-ids.js";
 import { buildCompactQuotaStatusLine } from "./tui-compact-format.js";
 import { hasNativeProviderQuotaClient } from "./tui-native-provider-quota.js";
 import type {
@@ -73,28 +77,41 @@ export function resolveWorkspaceDir(api: TuiPluginApi): string {
 }
 
 function makeTuiQuotaClient(api: TuiPluginApi) {
-  return {
-    config: {
-      providers: async () => {
-        try {
-          if (api.client.config?.providers) {
-            const response = await api.client.config.providers();
-            return {
-              data: {
-                providers: response.data?.providers ?? [],
-              },
-            };
-          }
-        } catch {
-          // Fall back to TUI state provider list below.
-        }
-
+  const loadProviders = async (): Promise<{
+    data: { providers: RuntimeProviderDescriptor[] };
+  }> => {
+    try {
+      if (api.client.config?.providers) {
+        const response = await api.client.config.providers();
         return {
           data: {
-            providers: api.state.provider.map((provider) => ({ id: provider.id })),
+            providers: (response.data?.providers ?? []).flatMap((provider) => {
+              const descriptor = narrowRuntimeProviderDescriptor(provider);
+              return descriptor ? [descriptor] : [];
+            }),
           },
         };
+      }
+    } catch {
+      // Fall back to TUI state provider list below.
+    }
+
+    // Preserve the exact runtime provider fields the TUI state already
+    // carries. Generated SDK typings may omit baseProviderID/name, so the
+    // shared structural narrowing decides what survives, not the typing.
+    return {
+      data: {
+        providers: api.state.provider.flatMap((provider) => {
+          const descriptor = narrowRuntimeProviderDescriptor(provider);
+          return descriptor ? [descriptor] : [];
+        }),
       },
+    };
+  };
+
+  return {
+    config: {
+      providers: loadProviders,
       get: async () => {
         try {
           if (api.client.config?.get) {
@@ -243,7 +260,10 @@ export type TuiSessionQuotaSurfaces = {
 };
 
 export type TuiInitialRuntimeSeed = Readonly<
-  Pick<QuotaRuntimeContext, "roots" | "config" | "configMeta" | "providers">
+  Pick<
+    QuotaRuntimeContext,
+    "roots" | "config" | "configMeta" | "providers" | "resolveRuntimeProviderIds"
+  >
 >;
 
 export type TuiSurfaceRegistrationOptions = {
@@ -598,6 +618,7 @@ export async function resolveTuiSurfaceRegistration(
     config: runtime.config,
     configMeta: runtime.configMeta,
     providers: runtime.providers,
+    resolveRuntimeProviderIds: runtime.resolveRuntimeProviderIds,
   });
   return registration;
 }
@@ -618,6 +639,7 @@ export async function loadTuiSessionQuotaSurfaces(params: {
     config: initialRuntimeSeed?.config,
     configMeta: initialRuntimeSeed?.configMeta,
     providers: initialRuntimeSeed?.providers,
+    resolveRuntimeProviderIds: initialRuntimeSeed?.resolveRuntimeProviderIds,
   });
 
   const sidebarEnabled = isSessionSidebarEnabled(runtime);
@@ -665,6 +687,7 @@ export async function loadTuiHomeBottomStatus(params: {
     config: initialRuntimeSeed?.config,
     configMeta: initialRuntimeSeed?.configMeta,
     providers: initialRuntimeSeed?.providers,
+    resolveRuntimeProviderIds: initialRuntimeSeed?.resolveRuntimeProviderIds,
   });
 
   const announcementEnabled =

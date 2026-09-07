@@ -112,6 +112,12 @@ export interface LoadConfigOptions {
   /** @deprecated Prefer configRootDir for new callers. */
   cwd?: string;
   configRootDir?: string;
+  /**
+   * Exact provider ids discovered from the running OpenCode instance. Used only
+   * to accept dynamic `enabledProviders` entries verbatim; omitted callers keep
+   * the canonical-catalog-only validation.
+   */
+  knownRuntimeProviderIds?: ReadonlySet<string> | Promise<ReadonlySet<string>>;
 }
 
 export function createLoadConfigMeta(): LoadConfigMeta {
@@ -407,7 +413,17 @@ function describeInvalidProviderValue(value: unknown): string {
   return typeof value === "string" ? value : typeof value;
 }
 
-function normalizeEnabledProviders(value: unknown): NormalizedEnabledProviders {
+/**
+ * @param knownRuntimeProviderIds Exact provider ids discovered from the running
+ * OpenCode instance. Discovered ids are accepted verbatim, without lowercasing
+ * or synonym collapsing, so an inherited provider instance keeps the exact id
+ * the user configured. When discovery is unavailable, validation falls back to
+ * the canonical catalog exactly as before.
+ */
+function normalizeEnabledProviders(
+  value: unknown,
+  knownRuntimeProviderIds?: ReadonlySet<string>,
+): NormalizedEnabledProviders {
   if (value === "auto") {
     return { value: "auto", issues: [] };
   }
@@ -433,6 +449,12 @@ function normalizeEnabledProviders(value: unknown): NormalizedEnabledProviders {
       continue;
     }
 
+    const exact = provider.trim();
+    if (exact && knownRuntimeProviderIds?.has(exact)) {
+      validProviders.push(exact);
+      continue;
+    }
+
     const normalized = normalizeQuotaProviderId(provider);
     if (normalized && getQuotaProviderShape(normalized)) {
       validProviders.push(normalized);
@@ -451,6 +473,14 @@ function normalizeEnabledProviders(value: unknown): NormalizedEnabledProviders {
     issues,
     invalidEmpty: normalizedProviders.length === 0 && invalidProviders.length > 0,
   };
+}
+
+async function resolveKnownRuntimeProviderIds(
+  quotaToastConfig: Record<string, unknown>,
+  knownRuntimeProviderIds: LoadConfigOptions["knownRuntimeProviderIds"],
+): Promise<ReadonlySet<string> | undefined> {
+  if (!hasOwnKey(quotaToastConfig, "enabledProviders")) return undefined;
+  return knownRuntimeProviderIds;
 }
 
 function normalizeGoogleModels(value: unknown): GoogleModelId[] | undefined {
@@ -635,6 +665,7 @@ function extractTelemetryConfigPatch(value: unknown): TelemetryConfigPatch | und
 function extractValidatedQuotaToastPatch(
   quotaToastConfig: Record<string, unknown>,
   reportIssue?: (key: string, message: string) => void,
+  knownRuntimeProviderIds?: ReadonlySet<string>,
 ): ValidatedQuotaToastPatch {
   const patch: ValidatedQuotaToastPatch = {};
 
@@ -711,7 +742,10 @@ function extractValidatedQuotaToastPatch(
   }
 
   if (hasOwnKey(quotaToastConfig, "enabledProviders")) {
-    const enabledProviders = normalizeEnabledProviders(quotaToastConfig.enabledProviders);
+    const enabledProviders = normalizeEnabledProviders(
+      quotaToastConfig.enabledProviders,
+      knownRuntimeProviderIds,
+    );
     for (const issue of enabledProviders.issues) {
       reportIssue?.("enabledProviders", issue);
     }
@@ -1352,9 +1386,16 @@ export async function loadConfig(
 
       applyValidatedQuotaToastPatch(
         config,
-        extractValidatedQuotaToastPatch(extractedQuotaToast, (key, message) => {
-          configIssues.push({ path: sourcePath, key, message });
-        }),
+        extractValidatedQuotaToastPatch(
+          extractedQuotaToast,
+          (key, message) => {
+            configIssues.push({ path: sourcePath, key, message });
+          },
+          await resolveKnownRuntimeProviderIds(
+            extractedQuotaToast,
+            options?.knownRuntimeProviderIds,
+          ),
+        ),
         sourcePath,
         settingSources,
       );
@@ -1446,9 +1487,16 @@ export async function loadConfig(
         const configIssues: LoadConfigIssue[] = [];
         applyValidatedQuotaToastPatch(
           config,
-          extractValidatedQuotaToastPatch(quotaToastConfig, (key, message) => {
-            configIssues.push({ path: "client.config.get", key, message });
-          }),
+          extractValidatedQuotaToastPatch(
+            quotaToastConfig,
+            (key, message) => {
+              configIssues.push({ path: "client.config.get", key, message });
+            },
+            await resolveKnownRuntimeProviderIds(
+              quotaToastConfig,
+              options?.knownRuntimeProviderIds,
+            ),
+          ),
           "client.config.get",
           settingSources,
         );

@@ -1,14 +1,17 @@
 import { createHash } from "node:crypto";
+import { materializeInheritedProviderInstances } from "../providers/openai-instances.js";
 import { getProviders } from "../providers/registry.js";
 import type { LoadConfigMeta } from "./config.js";
 import { createLoadConfigMeta, loadConfig } from "./config.js";
 import type { RuntimeContextRootHints, RuntimeContextRoots } from "./config-file-utils.js";
 import { resolveRuntimeContextRoots } from "./config-file-utils.js";
 import type { QuotaProvider, QuotaProviderContext } from "./entries.js";
+import { getQuotaProviderShape } from "./provider-metadata.js";
 import { cloneQuotaProviders } from "./quota-providers.js";
 import { configureQuotaTelemetry } from "./quota-telemetry.js";
 import {
-  createRuntimeProviderIdResolver,
+  createRuntimeProviderResolvers,
+  type RuntimeProviderDescriptor,
   type RuntimeProviderIdResolver,
 } from "./runtime-provider-ids.js";
 import type { QuotaToastConfig } from "./types.js";
@@ -31,6 +34,7 @@ export interface ResolveQuotaRuntimeContextParams {
   includeSessionMeta?: boolean | ((config: QuotaToastConfig) => boolean);
   configMeta?: LoadConfigMeta;
   providers?: QuotaProvider[];
+  resolveRuntimeProviderIds?: RuntimeProviderIdResolver;
   configureTelemetry?: boolean;
 }
 
@@ -58,23 +62,53 @@ export function shouldIncludeSessionMeta(params: {
   return params.includeSessionMeta === true;
 }
 
+/**
+ * Ids of quota providers that the canonical catalog cannot validate on its own.
+ *
+ * Only these need to be handed to config validation as dynamic ids. Canonical
+ * providers keep their existing catalog validation, and a discovered OpenCode
+ * provider that never became a quota provider is never accepted here.
+ */
+function collectDynamicQuotaProviderIds(providers: readonly QuotaProvider[]): ReadonlySet<string> {
+  return new Set(
+    providers
+      .filter((provider) => !getQuotaProviderShape(provider.id))
+      .map((provider) => provider.id),
+  );
+}
+
 export async function resolveQuotaRuntimeContext(
   params: ResolveQuotaRuntimeContextParams,
 ): Promise<QuotaRuntimeContext> {
   const roots = resolveRuntimeContextRoots(params.roots);
   const configMeta = params.configMeta ?? createLoadConfigMeta();
-  const config =
-    params.config ??
-    (await loadConfig(params.client, configMeta, {
-      configRootDir: roots.configRoot,
-    }));
+  const resolvers = createRuntimeProviderResolvers(params.client);
+
+  const descriptors: Promise<readonly RuntimeProviderDescriptor[]> = params.providers
+    ? Promise.resolve([])
+    : resolvers.resolveRuntimeProviderDescriptors().catch(() => []);
+  const providers = params.providers
+    ? Promise.resolve(params.providers)
+    : descriptors.then((runtimeDescriptors) =>
+        materializeInheritedProviderInstances({
+          providers: getProviders(),
+          descriptors: runtimeDescriptors,
+        }),
+      );
+  const config = params.config
+    ? Promise.resolve(params.config)
+    : loadConfig(params.client, configMeta, {
+        configRootDir: roots.configRoot,
+        knownRuntimeProviderIds: providers.then(collectDynamicQuotaProviderIds),
+      });
+  const [resolvedConfig, resolvedProviders] = await Promise.all([config, providers]);
   let sessionMeta = params.sessionMeta;
   if (
     !sessionMeta &&
     params.sessionID &&
     params.resolveSessionMeta &&
     shouldIncludeSessionMeta({
-      config,
+      config: resolvedConfig,
       includeSessionMeta: params.includeSessionMeta,
     })
   ) {
@@ -83,7 +117,7 @@ export async function resolveQuotaRuntimeContext(
   if (params.configureTelemetry !== false) {
     configureRuntimeTelemetry({
       client: params.client,
-      config,
+      config: resolvedConfig,
       session: { sessionMeta },
     });
   }
@@ -91,10 +125,11 @@ export async function resolveQuotaRuntimeContext(
   return {
     client: params.client,
     roots,
-    config,
+    config: resolvedConfig,
     configMeta,
-    providers: params.providers ?? getProviders(),
-    resolveRuntimeProviderIds: createRuntimeProviderIdResolver(params.client),
+    providers: resolvedProviders,
+    resolveRuntimeProviderIds:
+      params.resolveRuntimeProviderIds ?? resolvers.resolveRuntimeProviderIds,
     session: {
       sessionID: params.sessionID,
       sessionMeta,
