@@ -126,7 +126,7 @@ function formatGoogleModelsSource(sources: QuotaToastSettingSources | undefined)
 function getConfigPrecedenceLabel(configSource: string): string {
   switch (configSource) {
     case "files":
-      return "global defaults -> workspace overrides";
+      return "global defaults -> explicit profile -> workspace overrides";
     case "sdk":
       return "sdk fallback (no file-backed config)";
     case "defaults":

@@ -567,7 +567,9 @@ describe("buildQuotaStatusReport", () => {
     expect(report).toContain(
       "- configPaths: /tmp/config/opencode.json (experimental.quotaToast) | /tmp/project/opencode.jsonc (experimental.quotaToast)",
     );
-    expect(report).toContain("- precedence: global defaults -> workspace overrides");
+    expect(report).toContain(
+      "- precedence: global defaults -> explicit profile -> workspace overrides",
+    );
     expect(report).toContain(
       "- global_config_paths: /tmp/config/opencode.json (experimental.quotaToast)",
     );

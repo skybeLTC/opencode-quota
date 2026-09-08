@@ -3,12 +3,13 @@
  *
  * Precedence model:
  * - Global/user config provides defaults.
+ * - An explicit OPENCODE_CONFIG profile file overrides ordinary global settings.
  * - Workspace config at the resolved config root overrides ordinary settings.
  * - SDK config is used only as a fallback when no file-backed config exists.
  */
 
 import { existsSync } from "fs";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
 import { getEffectiveConfigRoot } from "./config-file-utils.js";
 import { isResetTimeDecimals } from "./format-utils.js";
 import {
@@ -102,6 +103,8 @@ export interface LoadConfigMeta {
   source: "sdk" | "files" | "defaults";
   paths: string[];
   globalConfigPaths: string[];
+  /** Sources contributed by the explicit OPENCODE_CONFIG profile file. */
+  profileConfigPaths: string[];
   workspaceConfigPaths: string[];
   settingSources: QuotaToastSettingSources;
   networkSettingSources: Record<string, string>;
@@ -125,6 +128,7 @@ export function createLoadConfigMeta(): LoadConfigMeta {
     source: "defaults",
     paths: [],
     globalConfigPaths: [],
+    profileConfigPaths: [],
     workspaceConfigPaths: [],
     settingSources: {},
     networkSettingSources: {},
@@ -195,7 +199,7 @@ type ValidatedQuotaToastPatch = {
   telemetry?: TelemetryConfigPatch;
 };
 
-export type ConfigLayerScope = "global" | "workspace";
+export type ConfigLayerScope = "global" | "profile" | "workspace";
 export type ConfigLayerKind = "legacy" | "plugin";
 
 export interface ConfigLayerCandidate {
@@ -1247,19 +1251,59 @@ function buildConfigLayerCandidatesForRoot(
   ];
 }
 
+/** Environment variable naming one explicit OpenCode config file. */
+export const OPENCODE_CONFIG_ENV_NAME = "OPENCODE_CONFIG";
+
+/**
+ * Resolves the explicit OpenCode profile config file, if any.
+ *
+ * The value names a single OpenCode config file, not a directory, so it is not
+ * a replacement for OPENCODE_CONFIG_DIR and never implies a sidecar location.
+ */
+export function resolveExplicitProfileConfigPath(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const configured = env[OPENCODE_CONFIG_ENV_NAME]?.trim();
+  return configured ? resolve(configured) : undefined;
+}
+
+function buildProfileConfigLayerCandidates(
+  profileConfigPath: string | undefined,
+  precedingCandidates: readonly ConfigLayerCandidate[],
+): ConfigLayerCandidate[] {
+  if (!profileConfigPath) return [];
+
+  // The profile is an OpenCode config file, so it contributes only the
+  // experimental.quotaToast container; no sidecar candidate is generated.
+  const path = resolve(profileConfigPath);
+  const alreadyCovered = new Set(precedingCandidates.map((candidate) => resolve(candidate.path)));
+  if (alreadyCovered.has(path)) return [];
+
+  return [{ path, rootDir: dirname(path), scope: "profile", kind: "legacy" }];
+}
+
 export function buildConfigLayerCandidates(
   configDirs: string[],
   configRootDir: string,
+  options: { profileConfigPath?: string } = {},
 ): ConfigLayerCandidate[] {
   const workspaceCandidates = buildConfigLayerCandidatesForRoot(configRootDir, "workspace");
   const globalCandidates = configDirs.flatMap((dir) =>
     buildConfigLayerCandidatesForRoot(dir, "global"),
   );
   const globalPaths = new Set(globalCandidates.map((candidate) => candidate.path));
+  const scopedWorkspaceCandidates = workspaceCandidates.filter(
+    (candidate) => !globalPaths.has(candidate.path),
+  );
 
+  // Precedence: global -> explicit profile -> workspace.
   return [
     ...globalCandidates,
-    ...workspaceCandidates.filter((candidate) => !globalPaths.has(candidate.path)),
+    ...buildProfileConfigLayerCandidates(options.profileConfigPath, [
+      ...globalCandidates,
+      ...scopedWorkspaceCandidates,
+    ]),
+    ...scopedWorkspaceCandidates,
   ];
 }
 
@@ -1304,6 +1348,7 @@ export async function loadConfig(
     config: QuotaToastConfig | null;
     usedPaths: string[];
     globalConfigPaths: string[];
+    profileConfigPaths: string[];
     workspaceConfigPaths: string[];
     settingSources: QuotaToastSettingSources;
     networkSettingSources: Record<string, string>;
@@ -1315,12 +1360,26 @@ export async function loadConfig(
     const config = cloneDefaultConfig();
     const usedPaths: string[] = [];
     const globalConfigPaths: string[] = [];
+    const profileConfigPaths: string[] = [];
     const workspaceConfigPaths: string[] = [];
     const settingSources: QuotaToastSettingSources = {};
     const configIssues: LoadConfigIssue[] = [];
     const authoritativeSidecarRoots = new Set<string>();
 
-    for (const candidate of buildConfigLayerCandidates(configDirs, configRootDir)) {
+    function recordSourcePath(candidate: ConfigLayerCandidate, sourcePath: string): void {
+      usedPaths.push(sourcePath);
+      if (candidate.scope === "global") {
+        globalConfigPaths.push(sourcePath);
+      } else if (candidate.scope === "profile") {
+        profileConfigPaths.push(sourcePath);
+      } else {
+        workspaceConfigPaths.push(sourcePath);
+      }
+    }
+
+    for (const candidate of buildConfigLayerCandidates(configDirs, configRootDir, {
+      profileConfigPath: resolveExplicitProfileConfigPath(),
+    })) {
       const rootKey = `${candidate.scope}:${candidate.rootDir}`;
       if (candidate.kind === "legacy" && authoritativeSidecarRoots.has(rootKey)) {
         continue;
@@ -1337,12 +1396,7 @@ export async function loadConfig(
       if (!isPlainObject(parsed)) {
         if (candidate.kind === "plugin") {
           const sourcePath = getConfigLayerSourceLabel(candidate);
-          usedPaths.push(sourcePath);
-          if (candidate.scope === "global") {
-            globalConfigPaths.push(sourcePath);
-          } else {
-            workspaceConfigPaths.push(sourcePath);
-          }
+          recordSourcePath(candidate, sourcePath);
           configIssues.push({
             path: sourcePath,
             key: "$root",
@@ -1377,12 +1431,7 @@ export async function loadConfig(
       }
 
       const sourcePath = getConfigLayerSourceLabel(candidate);
-      usedPaths.push(sourcePath);
-      if (candidate.scope === "global") {
-        globalConfigPaths.push(sourcePath);
-      } else {
-        workspaceConfigPaths.push(sourcePath);
-      }
+      recordSourcePath(candidate, sourcePath);
 
       applyValidatedQuotaToastPatch(
         config,
@@ -1441,6 +1490,7 @@ export async function loadConfig(
         config: null,
         usedPaths: [],
         globalConfigPaths: [],
+        profileConfigPaths: [],
         workspaceConfigPaths: [],
         settingSources: {},
         networkSettingSources: {},
@@ -1452,6 +1502,7 @@ export async function loadConfig(
       config,
       usedPaths,
       globalConfigPaths,
+      profileConfigPaths,
       workspaceConfigPaths,
       settingSources,
       networkSettingSources: projectNetworkSettingSources(settingSources),
@@ -1465,6 +1516,7 @@ export async function loadConfig(
       meta.source = "files";
       meta.paths = fileConfig.usedPaths;
       meta.globalConfigPaths = fileConfig.globalConfigPaths;
+      meta.profileConfigPaths = fileConfig.profileConfigPaths;
       meta.workspaceConfigPaths = fileConfig.workspaceConfigPaths;
       meta.settingSources = fileConfig.settingSources;
       meta.networkSettingSources = fileConfig.networkSettingSources;
@@ -1526,6 +1578,7 @@ export async function loadConfig(
           meta.source = "sdk";
           meta.paths = ["client.config.get"];
           meta.globalConfigPaths = [];
+          meta.profileConfigPaths = [];
           meta.workspaceConfigPaths = [];
           meta.settingSources = settingSources;
           meta.networkSettingSources = projectNetworkSettingSources(settingSources);
@@ -1543,6 +1596,7 @@ export async function loadConfig(
     meta.source = "defaults";
     meta.paths = [];
     meta.globalConfigPaths = [];
+    meta.profileConfigPaths = [];
     meta.workspaceConfigPaths = [];
     meta.settingSources = {};
     meta.networkSettingSources = {};
