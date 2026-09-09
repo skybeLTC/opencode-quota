@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
+import { LOCAL_PLUGIN_SPEC } from "../src/lib/local-deployment-commands.js";
+
 const migration = await readFile(
   new URL("../docs/readme/v4-migration.md", import.meta.url),
   "utf8",
@@ -37,7 +39,7 @@ describe("v4 migration documentation contract", () => {
     expect(migration).toContain(
       "v4 replaces the old `customSources` setting with `quotaProviders`",
     );
-    expect(migration).toContain("npx @slkiser/opencode-quota@latest provider add");
+    expect(migration).toContain("opencode-quota provider add");
     expect(migration).toContain("[Provider setup guide](providers.md#custom-providers)");
     expect(migration).not.toContain("custom-accounting-sources");
 
@@ -50,11 +52,24 @@ describe("v4 migration documentation contract", () => {
   });
 
   it("gives concrete preview, verification, and rollback steps", () => {
-    expect(migration).toContain("npx @slkiser/opencode-quota@latest update --dry-run");
+    expect(migration).toContain("opencode-quota update");
     expect(migration).toContain("## Check the update");
-    expect(migration).toContain("## Roll back to v3");
+    expect(migration).toContain("## Roll back an upstream npm installation to v3");
     expect(migration).toContain("Restart OpenCode, then run `/quota` and `/quota_status`.");
     expect(migration).toContain("The old setting is not read or converted automatically.");
     expect(migration).not.toContain("automatically migrates");
+  });
+
+  it("keeps the v3 rollback instructions upstream-only", () => {
+    const rollbackHeading = "## Roll back an upstream npm installation to v3";
+    const rollbackStart = migration.indexOf(rollbackHeading);
+    if (rollbackStart === -1) throw new Error("Upstream-only rollback heading not found");
+    const rollback = migration.slice(rollbackStart);
+
+    expect(rollback).toContain("upstream npm installation");
+    expect(rollback).toContain("@slkiser/opencode-quota@3");
+    expect(rollback).toContain("local-ai");
+    expect(rollback).toContain(LOCAL_PLUGIN_SPEC);
+    expect(rollback).toContain("informational-only");
   });
 });

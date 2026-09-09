@@ -1098,7 +1098,8 @@ describe("quota-state shared cache", () => {
     const key = quotaState.buildQuotaProviderStateCacheKey(provider.id, ctx);
     const path = quotaState.getQuotaProviderStateCacheFilePath(provider.id, key);
     const persisted = JSON.parse(await (await import("fs/promises")).readFile(path, "utf8"));
-    expect(persisted.version).toBe(2);
+    expect(persisted.version).toBe(3);
+    expect(persisted.cacheCompatibilityVersion).toBe(1);
     expect(persisted.timestamp).toBe(1_000);
     expect(JSON.stringify(persisted)).not.toContain("telemetry");
 
@@ -1243,7 +1244,7 @@ describe("quota-state shared cache", () => {
     telemetry.__resetQuotaTelemetryForTests();
   });
 
-  it("reuses cache v2 with accounting metadata across module resets", async () => {
+  it("reuses cache v3 with accounting metadata across module resets", async () => {
     const quotaStateA = await import("../src/lib/quota-state.js");
     quotaStateA.__resetQuotaStateForTests();
 
@@ -1310,15 +1311,12 @@ describe("quota-state shared cache", () => {
     const ctx = createTestContext();
     const key = quotaStateA.buildQuotaProviderStateCacheKey(provider.id, ctx);
     const path = quotaStateA.getQuotaProviderStateCacheFilePath(provider.id, key);
-    const { getPackageVersion } = await import("../src/lib/version.js");
-    const packageVersion = (await getPackageVersion()) ?? "unknown";
-
     await mkdir(`${TEST_RUNTIME_ROOT}/cache/quota-provider-state`, { recursive: true });
     await writeFile(
       path,
       JSON.stringify({
         version: 1,
-        packageVersion,
+        packageVersion: "4.8.2",
         key,
         providerId: provider.id,
         timestamp: Date.now(),
@@ -1528,7 +1526,7 @@ describe("quota-state shared cache", () => {
     expect(provider.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("treats cache package-version mismatches as a miss and refetches live data", async () => {
+  it("treats cache compatibility mismatches as a miss and refetches live data", async () => {
     const quotaStateA = await import("../src/lib/quota-state.js");
     quotaStateA.__resetQuotaStateForTests();
 
@@ -1775,15 +1773,12 @@ describe("quota-state shared cache", () => {
       runtimeEligibleQuotaProviders: [],
     });
     const path = quotaState.getQuotaProviderStateCacheFilePath(provider.id, key);
-    const { getPackageVersion } = await import("../src/lib/version.js");
-    const packageVersion = (await getPackageVersion()) ?? "unknown";
-
     await mkdir(`${TEST_RUNTIME_ROOT}/cache/quota-provider-state`, { recursive: true });
     await writeFile(
       path,
       JSON.stringify({
-        version: 2,
-        packageVersion,
+        version: 3,
+        cacheCompatibilityVersion: 1,
         key,
         providerId: provider.id,
         timestamp: Date.now(),
@@ -1868,15 +1863,12 @@ describe("quota-state shared cache", () => {
     const ctx = createTestContext();
     const key = quotaStateA.buildQuotaProviderStateCacheKey(provider.id, ctx);
     const path = quotaStateA.getQuotaProviderStateCacheFilePath(provider.id, key);
-    const { getPackageVersion } = await import("../src/lib/version.js");
-    const packageVersion = (await getPackageVersion()) ?? "unknown";
-
     await mkdir(`${TEST_RUNTIME_ROOT}/cache/quota-provider-state`, { recursive: true });
     await writeFile(
       path,
       JSON.stringify({
         version: 2,
-        packageVersion,
+        packageVersion: "4.8.2",
         key,
         providerId: provider.id,
         timestamp: Date.now(),
@@ -1915,15 +1907,12 @@ describe("quota-state shared cache", () => {
     const ctx = createTestContext();
     const key = quotaState.buildQuotaProviderStateCacheKey(provider.id, ctx);
     const path = quotaState.getQuotaProviderStateCacheFilePath(provider.id, key);
-    const { getPackageVersion } = await import("../src/lib/version.js");
-    const packageVersion = (await getPackageVersion()) ?? "unknown";
-
     await mkdir(`${TEST_RUNTIME_ROOT}/cache/quota-provider-state`, { recursive: true });
     await writeFile(
       path,
       JSON.stringify({
         version: 2,
-        packageVersion,
+        packageVersion: "4.8.2",
         key,
         providerId: provider.id,
         timestamp: Date.now(),
@@ -1947,7 +1936,8 @@ describe("quota-state shared cache", () => {
     expect(result.entries[0]?.name).toBe("Fresh");
     expect(provider.fetch).toHaveBeenCalledTimes(1);
     const replacement = JSON.parse(await (await import("fs/promises")).readFile(path, "utf8"));
-    expect(replacement.version).toBe(2);
+    expect(replacement.version).toBe(3);
+    expect(replacement.cacheCompatibilityVersion).toBe(1);
     expect(JSON.stringify(replacement)).not.toContain("barValue");
   });
 
@@ -2174,15 +2164,12 @@ describe("quota-state shared cache", () => {
     const ctx = createTestContext();
     const key = quotaState.buildQuotaProviderStateCacheKey(provider.id, ctx);
     const path = quotaState.getQuotaProviderStateCacheFilePath(provider.id, key);
-    const { getPackageVersion } = await import("../src/lib/version.js");
-    const packageVersion = (await getPackageVersion()) ?? "unknown";
-
     await mkdir(`${TEST_RUNTIME_ROOT}/cache/quota-provider-state`, { recursive: true });
     await writeFile(
       path,
       JSON.stringify({
         version: 2,
-        packageVersion,
+        packageVersion: "4.8.2",
         key,
         providerId: provider.id,
         timestamp: Date.now(),
@@ -2298,15 +2285,12 @@ describe("readCachedProviderResult", () => {
     const ctx = createTestContext();
     const key = quotaStateA.buildQuotaProviderStateCacheKey(provider.id, ctx);
     const path = quotaStateA.getQuotaProviderStateCacheFilePath(provider.id, key);
-    const { getPackageVersion } = await import("../src/lib/version.js");
-    const packageVersion = (await getPackageVersion()) ?? "unknown";
-
     await mkdir(`${TEST_RUNTIME_ROOT}/cache/quota-provider-state`, { recursive: true });
     await writeFile(
       path,
       JSON.stringify({
-        version: 2,
-        packageVersion,
+        version: 3,
+        cacheCompatibilityVersion: 1,
         key: createHash("sha256").update(key).digest("hex"),
         providerId: provider.id,
         timestamp: Date.now(),

@@ -10,11 +10,12 @@ import type {
 } from "./entries.js";
 import { cloneQuotaToastEntry } from "./entries.js";
 
-export const QUOTA_PROVIDER_CACHE_VERSION = 2 as const;
+export const QUOTA_PROVIDER_CACHE_VERSION = 3 as const;
+export const QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION = 1 as const;
 
 export type PersistedQuotaProviderCacheEntry = {
   version: typeof QUOTA_PROVIDER_CACHE_VERSION;
-  packageVersion: string;
+  cacheCompatibilityVersion: typeof QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION;
   key: string;
   providerId: string;
   timestamp: number;
@@ -23,7 +24,7 @@ export type PersistedQuotaProviderCacheEntry = {
 
 export type PersistedQuotaProviderCacheIdentity = Pick<
   PersistedQuotaProviderCacheEntry,
-  "packageVersion" | "key" | "providerId"
+  "cacheCompatibilityVersion" | "key" | "providerId"
 >;
 
 export function cloneQuotaProviderResult(result: QuotaProviderResult): QuotaProviderResult {
@@ -457,7 +458,7 @@ export function encodePersistedQuotaProviderCacheEntry(
 ): PersistedQuotaProviderCacheEntry {
   return {
     version: QUOTA_PROVIDER_CACHE_VERSION,
-    packageVersion: value.packageVersion,
+    cacheCompatibilityVersion: value.cacheCompatibilityVersion,
     key: value.key,
     providerId: value.providerId,
     timestamp: value.timestamp,
@@ -471,9 +472,16 @@ function isPersistedQuotaProviderCacheEnvelope(
 ): value is Record<string, unknown> {
   return (
     isRecord(value) &&
-    hasOnlyKeys(value, ["version", "packageVersion", "key", "providerId", "timestamp", "result"]) &&
+    hasOnlyKeys(value, [
+      "version",
+      "cacheCompatibilityVersion",
+      "key",
+      "providerId",
+      "timestamp",
+      "result",
+    ]) &&
     value.version === QUOTA_PROVIDER_CACHE_VERSION &&
-    value.packageVersion === expected.packageVersion &&
+    value.cacheCompatibilityVersion === expected.cacheCompatibilityVersion &&
     value.key === expected.key &&
     value.providerId === expected.providerId &&
     typeof value.timestamp === "number" &&
@@ -491,7 +499,7 @@ export function decodePersistedQuotaProviderCacheEntry(
 
   return {
     version: QUOTA_PROVIDER_CACHE_VERSION,
-    packageVersion: expected.packageVersion,
+    cacheCompatibilityVersion: expected.cacheCompatibilityVersion,
     key: expected.key,
     providerId: expected.providerId,
     timestamp: value.timestamp as number,

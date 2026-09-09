@@ -271,7 +271,9 @@ describe("package manifest compatibility", () => {
   });
 
   it("defines one ordered canonical repository gate and a release-only compatibility alias", () => {
-    expect(pkg.scripts?.build).toContain("node scripts/clean-dist.mjs && tsc");
+    expect(pkg.scripts?.build).toContain(
+      "node scripts/clean-dist.mjs && node scripts/generate-build-metadata.mjs && tsc",
+    );
     expect(pkg.scripts?.verify).toBe(VERIFY_COMMAND);
     expect(pkg.scripts?.verify).not.toContain("verify:release-version");
     expect(pkg.scripts?.verify).not.toContain("verify:release-package");

@@ -21,12 +21,11 @@ import {
   decodePersistedQuotaProviderCacheEntry,
   encodePersistedQuotaProviderCacheEntry,
   normalizeQuotaProviderResult,
+  QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION,
 } from "./quota-state-codec.js";
 import { updateQuotaTelemetrySnapshot } from "./quota-telemetry.js";
 import type { ResolvedAuthIdentity } from "./resolved-auth-identity.js";
-import { getPackageVersion } from "./version.js";
 
-const QUOTA_PROVIDER_CACHE_PACKAGE_VERSION_FALLBACK = "unknown";
 const QUOTA_PROVIDER_CACHE_DIRNAME = "quota-provider-state";
 const QUOTA_PROVIDER_CACHE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const QUOTA_PROVIDER_CACHE_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
@@ -108,10 +107,6 @@ export function getQuotaProviderStateCacheFilePath(providerId: string, key: stri
   );
 }
 
-async function getQuotaProviderCachePackageVersion(): Promise<string> {
-  return (await getPackageVersion()) ?? QUOTA_PROVIDER_CACHE_PACKAGE_VERSION_FALLBACK;
-}
-
 async function safeRm(path: string): Promise<void> {
   try {
     await rm(path, { force: true, recursive: true });
@@ -155,7 +150,7 @@ async function maybePrunePersistedQuotaProviderCache(now: number): Promise<void>
 async function readPersistedQuotaProviderCacheEntry(params: {
   key: string;
   providerId: string;
-  packageVersion: string;
+  cacheCompatibilityVersion: typeof QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION;
   ttlMs: number;
   now: number;
   ignoreExpiry?: boolean;
@@ -173,7 +168,7 @@ async function readPersistedQuotaProviderCacheEntry(params: {
     const decoded = decodePersistedQuotaProviderCacheEntry(parsed, {
       key: cacheLocator,
       providerId: params.providerId,
-      packageVersion: params.packageVersion,
+      cacheCompatibilityVersion: params.cacheCompatibilityVersion,
     });
     if (!decoded) {
       await safeRm(path);
@@ -390,7 +385,7 @@ export async function fetchQuotaProviderResult(params: {
       return snapshot;
     }
     const entry = encodePersistedQuotaProviderCacheEntry({
-      packageVersion: await getQuotaProviderCachePackageVersion(),
+      cacheCompatibilityVersion: QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION,
       key: getQuotaProviderStateCacheLocator(key),
       providerId: provider.id,
       timestamp: Date.now(),
@@ -415,13 +410,13 @@ export async function fetchQuotaProviderResult(params: {
     runtimeEligibleQuotaProviders?.some((definition) => definition.mode === "local-estimate") ===
       true;
   const now = Date.now();
-  const packageVersion = await getQuotaProviderCachePackageVersion();
+  const cacheCompatibilityVersion = QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION;
   await maybePrunePersistedQuotaProviderCache(now);
 
   const inMemory = forceAggregateRefresh ? undefined : inMemoryCache.get(key);
   if (
     inMemory &&
-    inMemory.packageVersion === packageVersion &&
+    inMemory.cacheCompatibilityVersion === cacheCompatibilityVersion &&
     ttlMs > 0 &&
     now - inMemory.timestamp < ttlMs
   ) {
@@ -453,7 +448,7 @@ export async function fetchQuotaProviderResult(params: {
     : await readPersistedQuotaProviderCacheEntry({
         key,
         providerId: provider.id,
-        packageVersion,
+        cacheCompatibilityVersion,
         ttlMs,
         now,
       });
@@ -499,7 +494,7 @@ export async function fetchQuotaProviderResult(params: {
     }
 
     const entry = encodePersistedQuotaProviderCacheEntry({
-      packageVersion,
+      cacheCompatibilityVersion,
       key: getQuotaProviderStateCacheLocator(key),
       providerId: provider.id,
       timestamp: Date.now(),
@@ -574,11 +569,11 @@ export async function readCachedProviderResult(params: {
     };
   }
 
-  const packageVersion = await getQuotaProviderCachePackageVersion();
+  const cacheCompatibilityVersion = QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION;
   const persisted = await readPersistedQuotaProviderCacheEntry({
     key,
     providerId: params.provider.id,
-    packageVersion,
+    cacheCompatibilityVersion,
     ttlMs: params.ttlMs,
     now,
     ignoreExpiry: true,

@@ -1521,7 +1521,7 @@ async function promptForSelections(
     manualProviders = selected.filter((value): value is string => typeof value === "string");
   }
   prompts.log.info("Custom providers are configured after installation.");
-  prompts.log.info("npx @slkiser/opencode-quota@latest provider add");
+  prompts.log.info("opencode-quota provider add");
 
   const formatStyle = await prompts.select({
     message: "Quota reset periods",
@@ -1653,7 +1653,7 @@ export async function runInitInstaller(params?: {
 
     if (params?.dryRun) {
       prompts.outro(
-        "OpenCode Quota setup preview complete — no files changed. Run npx @slkiser/opencode-quota@latest init to apply.",
+        "OpenCode Quota setup preview complete — no files changed. Run opencode-quota init to apply.",
       );
       return 0;
     }

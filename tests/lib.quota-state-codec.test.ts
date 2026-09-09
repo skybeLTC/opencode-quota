@@ -9,11 +9,12 @@ import {
   decodePersistedQuotaProviderCacheEntry,
   encodePersistedQuotaProviderCacheEntry,
   normalizeQuotaProviderResult,
+  QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION,
   QUOTA_PROVIDER_CACHE_VERSION,
 } from "../src/lib/quota-state-codec.js";
 
 const EXPECTED_IDENTITY = {
-  packageVersion: "4.2.0",
+  cacheCompatibilityVersion: QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION,
   key: "synthetic|account=test",
   providerId: "synthetic",
 } as const;
@@ -417,7 +418,7 @@ describe("quota-state codec", () => {
     expect(cloned.diagnostics?.[0]?.authPaths).not.toBe(input.diagnostics?.[0]?.authPaths);
   });
 
-  it("encodes V2 and round-trips parsed envelopes by semantic value", () => {
+  it("encodes V3 and round-trips parsed envelopes by semantic value", () => {
     const input = createValidResult();
     const encoded = createEnvelope(input);
 
@@ -440,6 +441,14 @@ describe("quota-state codec", () => {
     );
   });
 
+  it("keeps display identity out of cache compatibility envelopes", () => {
+    const encoded = createEnvelope();
+
+    expect(encoded.cacheCompatibilityVersion).toBe(QUOTA_PROVIDER_CACHE_COMPATIBILITY_VERSION);
+    expect(encoded).not.toHaveProperty("displayVersion");
+    expect(encoded).not.toHaveProperty("shortCommit");
+  });
+
   it("is total for parsed non-object envelopes", () => {
     for (const value of [null, true, false, 0, 1.5, "cache", [], [createEnvelope()], {}]) {
       expectInvalidEnvelope(value);
@@ -447,7 +456,14 @@ describe("quota-state codec", () => {
   });
 
   it("rejects missing and extra envelope keys", () => {
-    for (const key of ["version", "packageVersion", "key", "providerId", "timestamp", "result"]) {
+    for (const key of [
+      "version",
+      "cacheCompatibilityVersion",
+      "key",
+      "providerId",
+      "timestamp",
+      "result",
+    ]) {
       const value = { ...createEnvelope() } as Record<string, unknown>;
       delete value[key];
       expectInvalidEnvelope(value);
@@ -457,8 +473,9 @@ describe("quota-state codec", () => {
 
   it.each([
     ["V1", { version: 1 }],
-    ["future versions", { version: 3 }],
-    ["package identity", { packageVersion: "4.2.1" }],
+    ["V2", { version: 2 }],
+    ["future versions", { version: 4 }],
+    ["cache compatibility identity", { cacheCompatibilityVersion: 2 }],
     ["cache key identity", { key: "other" }],
     ["provider identity", { providerId: "other" }],
     ["string timestamps", { timestamp: "1777777777777" }],

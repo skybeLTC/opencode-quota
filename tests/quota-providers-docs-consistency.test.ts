@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 
+import { LOCAL_PLUGIN_SPEC } from "../src/lib/local-deployment-commands.js";
 import { validateQuotaProviders } from "../src/lib/quota-providers.js";
 import {
   hasMarkdownLinkTo,
@@ -59,7 +60,7 @@ describe("quota provider Phase 7 documentation consistency", () => {
     const troubleshootingProviderFixes = readMarkdownSection(troubleshooting, /^Provider fixes$/);
     const externalJsonBasics = readMarkdownSection(external, /^JSON basics$/);
 
-    const providerAddCommand = "npx @slkiser/opencode-quota@latest provider add";
+    const providerAddCommand = "opencode-quota provider add";
     expect(readmeCommands).toContain(providerAddCommand);
     expect(readmeCustomProviders).toContain(providerAddCommand);
     expect(
@@ -202,6 +203,37 @@ describe("quota provider Phase 7 documentation consistency", () => {
     expect(
       readMarkdownParagraphContaining(externalJsonBasics, "raw provider responses", "public JSON"),
     ).toMatch(/raw provider responses[\s\S]*\b(?:excluded|omitted) from public JSON\b/i);
+  });
+
+  it("keeps local-only deployment guidance aligned with runtime ownership", () => {
+    const readme = read("README.md");
+    const configuration = read("docs/readme/configuration.md");
+    const providers = read("docs/readme/providers.md");
+    const troubleshooting = read("docs/readme/troubleshooting.md");
+    const updating = read("docs/readme/updating.md");
+    const migration = read("docs/readme/v4-migration.md");
+
+    for (const document of [readme, providers, troubleshooting]) {
+      expect(document).toContain(LOCAL_PLUGIN_SPEC);
+      expect(document).not.toContain("before `@slkiser/opencode-quota`");
+    }
+    expect(configuration).toContain("`opencode-quota init` is disabled");
+    expect(configuration).not.toContain("The installer chooses");
+    expect(configuration).not.toContain("explicit `update` command migrates");
+
+    for (const document of [configuration, providers, updating, migration]) {
+      for (const staleAnchor of [
+        "#what-can-change-automatically",
+        "#opencode-go-findings",
+        "#opencode-zen-findings",
+      ]) {
+        expect(document).not.toContain(staleAnchor);
+      }
+    }
+    expect(providers).not.toContain("The updater reports obsolete");
+    expect(providers).not.toContain("The updater may");
+    expect(providers).not.toContain("can migrate recognized file-backed");
+    expect(providers).toContain("The local-only `update` command");
   });
 
   it("links to the authoritative external references used by the README", () => {

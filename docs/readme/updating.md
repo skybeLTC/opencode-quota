@@ -2,117 +2,52 @@
 
 # Updating safely
 
-## What the command does
+## Local-only ownership
 
-`npx @slkiser/opencode-quota@latest update` first asks npm to resolve and run the published `@latest` CLI package. That npm resolution and execution begins before the updater can print its preview. The preview guarantee covers changes owned by the updater: OpenCode configuration files and OpenCode Quota package-cache directories.
+這個 downstream build 的 `update` 是 informational-only。Deployment owner 是 `local-ai`，managed
+plugin path 是 `{env:HOME}/local-ai/opencode-satellites/opencode-quota`。
 
-The updater builds one plan, prints it in full, and then either stops or applies that same plan. It does not add runtime compatibility fallbacks.
+Command 只顯示 local identity 與 ownership；不會解析 npm、不會 network fetch，也不會修改 config、
+package cache、credentials 或 migration state。
 
-## Preview, apply, and restart
-
-1. Close OpenCode.
-2. Preview without changing configuration or package caches:
-
-   ```bash
-   npx @slkiser/opencode-quota@latest update --dry-run
-   ```
-
-3. Read every section. If the plan is correct, apply it:
-
-   ```bash
-   npx @slkiser/opencode-quota@latest update
-   ```
-
-   The interactive command asks once before safe work begins. For a noninteractive run, use:
-
-   ```bash
-   npx @slkiser/opencode-quota@latest update --yes
-   ```
-
-   `--yes` still prints the full preview. It authorizes only deterministic config edits and manifest-verified cache cleanup, never secret changes.
-
-4. Restart OpenCode.
-5. Run `/quota_status` in OpenCode, or run this in a terminal:
-
-   ```bash
-   opencode-quota status
-   ```
-
-## Read the preview
-
-The preview can contain three sections:
-
-- **Safe changes this command can make:** package-spec edits and recognized file-backed display-setting migration.
-- **Manual actions — this command will not change these sources:** credential findings or config cases that require your review.
-- **Package-cache candidates:** directories considered for removal. A candidate is removed only after current config and the package manifest are verified.
-
-Empty sections are omitted. No updater-owned config or cache change happens before the preview and, for the interactive command, your confirmation.
-
-The command uses two exit codes:
-
-- `0`: applied, already current, successful dry-run, manual-only findings, or cancellation.
-- `1`: invalid arguments, incomplete planning, a config race, a write failure, or post-write validation failure.
-
-Manual findings do not make the command fail. They remain your responsibility.
-
-## What can change automatically
-
-The updater can:
-
-- change supported OpenCode Quota plugin package specs to `@latest`;
-- remove only package-cache directories that pass path, symlink, containment, and exact package-manifest checks;
-- migrate recognized `opencodeZenDisplay` values in known file-backed quota config locations:
-  - `"default"` becomes root `accountingDetail: "summary"`;
-  - `"detailed"` becomes root `accountingDetail: "detailed"`;
-- keep an existing valid `accountingDetail` value and remove the obsolete ignored key, even when the two values differ.
-
-Targeted JSON/JSONC edits preserve unrelated settings, plugins, comments, trailing commas, and tuple options where the document can be edited safely.
-
-Unsupported or invalid display values, invalid replacement values, duplicate keys, ambiguous structures, malformed files, unsupported roots, and newly discovered symlinks are left unchanged for manual review. SDK-only config is diagnostic-only because it has no safe file path for the updater to edit.
-
-## What stays manual
-
-Credential findings are report-only. The audit detects known obsolete sources by variable-name or file-path presence without retrieving environment values or opening credential files. It never prints, copies, or deletes secret values, and it does not edit environment declarations, shell startup files, `auth.json`, supported credential files, or legacy credential files.
-
-### OpenCode Go findings
-
-OpenCode Go now uses an official API key. Configure one supported source in this order:
-
-1. `OPENCODE_API_KEY`
-2. Trusted user/global OpenCode config: `provider.opencode-go.options.apiKey`
-3. Trusted user/global fallback: `provider.opencode.options.apiKey`
-4. A strict `opencode-go` API-key entry in OpenCode `auth.json`
-5. A strict legacy `opencode` API-key entry in `auth.json` as the final fallback
-
-You can create the canonical `auth.json` entry with:
+## Inspect identity
 
 ```bash
-opencode auth login -p opencode-go
+opencode-quota update
 ```
 
-Verify the supported key with `/quota_status` or terminal `opencode-quota status`. Only after it works, manually remove obsolete declarations for `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE`, plus any obsolete global `opencode-quota/opencode-go.json` file.
+`--dry-run` 與 `--yes` 為 compatibility flags，但同樣不會產生 mutation：
 
-Workspace/cookie material cannot be converted into the official API key. Do not paste credential values into command output, issue reports, or support messages.
-
-### OpenCode Zen findings
-
-`OPENCODE_WORKSPACE_ID` and `OPENCODE_AUTH_COOKIE` are ambiguous names: they may come from an older Zen setup, but they may instead belong to OpenCode's workspace feature. Current quota code ignores them. The updater reports them only when it finds no supported global `opencode-quota/opencode.json` path, and it does not read or move their values.
-
-First decide whether those variables really contain Zen credentials. If they do, create the supported file under your global OpenCode config directory. The usual path is `~/.config/opencode/opencode-quota/opencode.json`:
-
-```json
-{
-  "workspaceId": "your-workspace-id",
-  "authCookie": "your-auth-cookie"
-}
+```bash
+opencode-quota update --dry-run
+opencode-quota update --yes
 ```
 
-Use placeholders while documenting or sharing the setup; never share the real values. Restrict file access to your user account, verify with `/quota_status` or terminal `opencode-quota status`, and only then remove obsolete environment declarations manually. If the variables belong to OpenCode's workspace feature, leave them with that feature instead of treating them as Zen credentials.
+需要更新 runtime 時，請在 `local-ai` management repo review source、建立 commit，並從 clean
+committed HEAD 重新 build；不要使用 npm 或遠端 package 取代 managed path。
 
-## Cancellation, failures, and reruns
+## 不會發生的事
 
-Before updating, back up the OpenCode config files you use. This is especially important if you may roll back to an older plugin version, because old versions do not understand every current setting.
+`update` 不會：
 
-Cancelling the interactive prompt changes nothing. Dry-run also changes nothing. A successful migration is idempotent: rerunning does not repeat a completed display edit, though manual findings remain until you resolve their sources.
+- 安裝、更新或解析 npm package。
+- 讀取、列印、複製、刪除 credentials。
+- 寫入 OpenCode config 或 quota sidecar。
+- 刪除或重建 package cache。
+- 做 v2 cache、display setting 或 plugin path migration。
 
-The updater checks every planned file again before writing and writes each changed file atomically. It does not claim that several files form one transaction and it does not overwrite concurrent edits with an automatic rollback. If a later file changes or a write fails after earlier files were written, the error lists the files changed before failure and deletes no package cache. Fix the reported cause, inspect those paths, and rerun the dry-run command to build a fresh plan.
+舊版 upstream updater implementation 可留在 source tree 作為 inactive reference，但 CLI 不會呼叫它。
+
+## Exit code
+
+- `0`：identity inspection 完成，或 accepted compatibility flags 完成。
+- `1`：參數不合法，或 `init` 被 local-only deployment guard 拒絕。
+
+`opencode-quota init` 永遠 fail-closed；請參考 [local-ai downstream 使用說明](local-only.md)。
+
+## Manual provider and credential work
+
+`opencode-quota status` 只提供診斷資訊。Provider 設定、credentials 與 migration 必須由 owning
+`local-ai` repo 或使用者明確授權的 config 管理流程處理；不要把 credential value 貼到 command
+output、issue 或 support message。Provider-specific guidance 請看
+[Troubleshooting](troubleshooting.md) 與 [Providers](providers.md)。

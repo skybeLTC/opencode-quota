@@ -1098,7 +1098,7 @@ describe("init installer planning and merge behavior", () => {
     expect(existsSync(join(tempDir, "opencode.jsonc"))).toBe(false);
     expect(existsSync(join(tempDir, "opencode-quota", "quota-toast.json"))).toBe(false);
     expect(prompts.outroCalls).toContain(
-      "OpenCode Quota setup preview complete — no files changed. Run npx @slkiser/opencode-quota@latest init to apply.",
+      "OpenCode Quota setup preview complete — no files changed. Run opencode-quota init to apply.",
     );
   });
 

@@ -33,7 +33,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc && node scripts/copy-data.mjs && node scripts/prepare-tui-dist.mjs",
+    "build": "node scripts/clean-dist.mjs && node scripts/generate-build-metadata.mjs && tsc && node scripts/copy-data.mjs && node scripts/prepare-tui-dist.mjs",
     "build:check": "pnpm run build && pnpm pack --dry-run",
     "check": "biome check .",
     "format": "biome format --write .",

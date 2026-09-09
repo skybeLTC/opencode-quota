@@ -19,42 +19,49 @@
 
 ---
 
-## Quick start
+## 本地 downstream 使用
 
-```bash
-npx @slkiser/opencode-quota init
+這個 checkout 由 `local-ai` 管理，不是獨立的 npm deployment。請先閱讀
+[local-ai downstream 使用說明](docs/readme/local-only.md)，再由管理 repo 將 package directory
+載入：
+
+```text
+{env:HOME}/local-ai/opencode-satellites/opencode-quota
 ```
+
+`opencode-quota init` 在此 local build 固定停用；`opencode-quota update` 只回報 local identity
+與 deployment owner，不會執行 network、npm、config、package-cache 或 migration mutation。
 
 > [!IMPORTANT]
 > Node.js `>= 22` is required.
 
 Upgrading from v3? Read the [v4 migration guide](docs/readme/v4-migration.md).
 
-After installation:
+After local registration:
 
 1. Restart OpenCode.
 2. Run a slash command in OpenCode, or use `opencode-quota show` from your terminal.
 3. If you enabled the sidebar, open the session sidebar and look for `Quota`.
 4. If you enabled the compact status line, look at the bottom of Home or below the message input.
 
-## Updating
+## 更新與維護邊界
 
-1. Close OpenCode.
-2. Preview the update:
+`opencode-quota update` 是 informational-only command：
 
-   ```bash
-   npx @slkiser/opencode-quota@latest update --dry-run
-   ```
+```bash
+opencode-quota update
+```
 
-3. Inspect the safe setting/cache changes and manual credential findings, then apply:
+它只顯示：
 
-   ```bash
-   npx @slkiser/opencode-quota@latest update
-   ```
+- local display identity
+- `local-ai` deployment owner
+- managed plugin path
 
-4. Restart OpenCode.
+它不會讀取、修改或刪除 credentials，也不會呼叫 npm、network、config/cache migration 或
+package updater。要更新 runtime，請在 `local-ai` 管理 repo 完成 review、commit 與 clean build。
 
-The updater prints the complete preview before its own config or cache changes. `--yes` authorizes only the previewed safe config edits and manifest-verified cache cleanup; it never moves or deletes secrets. See [Updating safely](docs/readme/updating.md) for detailed behavior and manual credential steps.
+See [local-ai downstream 使用說明](docs/readme/local-only.md) and [Updating safely](docs/readme/updating.md).
 
 ## Choose your setup
 
@@ -116,17 +123,18 @@ See [Configuration](docs/readme/configuration.md) for UI options and [Manual ins
 
 ### CLI commands
 
-Use the CLI for setup, updates, terminal checks, and custom providers.
+Use the CLI for terminal checks and custom providers. `init` and `update` follow the local ownership
+rules above.
 
 | Command                                                  | What it does                                |
 | -------------------------------------------------------- | ------------------------------------------- |
-| `npx @slkiser/opencode-quota@latest init`                | Set up OpenCode Quota                       |
-| `npx @slkiser/opencode-quota@latest provider add`        | Add or update a custom provider             |
-| `npx @slkiser/opencode-quota@latest show`                | Show current quota                          |
-| `npx @slkiser/opencode-quota@latest status`              | Check configuration and provider problems  |
-| `npx @slkiser/opencode-quota@latest update`              | Update an existing installation             |
+| `opencode-quota init`                                    | Disabled; deployment is managed by local-ai |
+| `opencode-quota provider add`                            | Add or update a custom provider              |
+| `opencode-quota show`                                    | Show current quota                           |
+| `opencode-quota status`                                  | Check configuration and provider problems   |
+| `opencode-quota update`                                  | Show identity; never mutate deployment       |
 
-Run `npx @slkiser/opencode-quota@latest --help` for command options. See [External integration](docs/readme/external-integration.md#1-get-json-from-a-command) for JSON, scripts, and CI examples.
+Run `opencode-quota --help` for command options. See [External integration](docs/readme/external-integration.md#1-get-json-from-a-command) for JSON, scripts, and CI examples.
 
 ## Providers
 
@@ -216,7 +224,7 @@ These vendors offer team or business plans, but the current integrations report 
 Add a provider that uses a remote quota API or tracks a local usage estimate:
 
 ```bash
-npx @slkiser/opencode-quota@latest provider add
+opencode-quota provider add
 ```
 
 The guided setup previews the change before saving. See the [custom-provider guide](docs/readme/providers.md#custom-providers) for details.
@@ -227,7 +235,7 @@ If quota or token data looks wrong:
 
 1. Run `/quota_status` in OpenCode, or `opencode-quota status` from a terminal for the same diagnostics. Use `opencode-quota show` for a quick quota glance.
 2. Confirm the expected provider appears in the detected provider list.
-3. Confirm companion auth plugins are before `@slkiser/opencode-quota` in `opencode.json`.
+3. Confirm companion auth plugins are before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`.
 4. If token reports are empty, start OpenCode once so it creates `opencode.db`, then run a session with model usage.
 5. Check [Troubleshooting](docs/readme/troubleshooting.md) for common symptoms and provider-specific fixes.
 

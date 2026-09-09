@@ -4,21 +4,22 @@ import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runInitInstaller } from "../lib/init-installer.js";
+import {
+  runManagedInitCommand,
+  runManagedUpdateCommand,
+} from "../lib/local-deployment-commands.js";
 
 const USAGE = [
   "Usage:",
-  "  npx @slkiser/opencode-quota init [--dry-run] [--sync-legacy-config]",
-  "  npx @slkiser/opencode-quota show [--provider <provider-id>] [--json] [--threshold <pct>]",
-  "  npx @slkiser/opencode-quota status [--provider <provider-id>] [--json]",
-  "  npx @slkiser/opencode-quota update [--dry-run] [--yes]",
-  "  npx @slkiser/opencode-quota provider add [--dry-run]",
-  "  npx @slkiser/opencode-quota --help",
+  "  opencode-quota init [--dry-run] [--sync-legacy-config]",
+  "  opencode-quota show [--provider <provider-id>] [--json] [--threshold <pct>]",
+  "  opencode-quota status [--provider <provider-id>] [--json]",
+  "  opencode-quota update [--dry-run] [--yes]",
+  "  opencode-quota provider add [--dry-run]",
+  "  opencode-quota --help",
   "",
   "Commands:",
-  "  init    Run the interactive quota installer",
-  "          --dry-run            Preview validated changes without writing files",
-  "          --sync-legacy-config also writes experimental.quotaToast",
+  "  init    Disabled: this local build is managed by local-ai",
   "  show    Print a quick quota glance",
   "          --json               Machine-readable JSON output (reads from cache)",
   "          --threshold <pct>    With --json, exit 1 if below <pct>%, 2 if incomplete/not comparable",
@@ -26,11 +27,9 @@ const USAGE = [
   "  status  Print Quota Status diagnostics (same data as /quota_status)",
   "          --json               Machine-readable JSON output",
   "          --provider <id>      Filter to one provider",
-  "  update  Preview safe setting/package-cache changes and report legacy credential findings",
-  "          Credential-specific audit sources and values are not read",
-  "          Values encountered in normal config parsing are never printed, copied, or modified",
-  "          --dry-run            Print the full responsible preview without changing anything",
-  "          --yes                Apply only safe setting/cache work after printing the preview",
+  "  update  Show local identity and deployment ownership; never mutates anything",
+  "          --dry-run            Accepted for compatibility; no changes are made",
+  "          --yes                Accepted for compatibility; no changes are made",
   "  provider add  Add or update one global quotaProviders definition",
   "          --dry-run            Preview the exact global OpenCode config without writing",
 ].join("\n");
@@ -73,13 +72,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
 
   if (command === "init") {
-    const allowed = new Set(["--dry-run", "--sync-legacy-config"]);
-    if (rest.every((arg) => allowed.has(arg)) && new Set(rest).size === rest.length) {
-      return await runInitInstaller({
-        ...(rest.includes("--dry-run") ? { dryRun: true } : {}),
-        ...(rest.includes("--sync-legacy-config") ? { syncLegacyConfig: true } : {}),
-      });
-    }
+    return runManagedInitCommand({ argv: rest });
   }
 
   if (command === "show") {
@@ -93,8 +86,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
 
   if (command === "update") {
-    const { runScopedUpdateCommand } = await import("../lib/scoped-update.js");
-    return await runScopedUpdateCommand({ argv: rest });
+    return await runManagedUpdateCommand({ argv: rest });
   }
 
   if (command === "provider" && rest[0] === "add") {

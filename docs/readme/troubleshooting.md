@@ -30,31 +30,24 @@ If every provider is missing, confirm OpenCode Quota is listed in `opencode.json
 
 ## Update safely
 
-1. Close OpenCode.
-2. Preview the update:
+`opencode-quota update` is informational-only in this local build:
 
-   ```bash
-   npx @slkiser/opencode-quota@latest update --dry-run
-   ```
+```bash
+opencode-quota update
+```
 
-3. Inspect both safe changes and manual findings. Do not paste credential values into command output or issue reports.
-4. Apply the plan:
+It shows local identity, `local-ai` ownership, and the managed plugin path. It does not read or mutate
+credentials, config, package cache, or migration state. To update runtime code, use the `local-ai`
+management repo and rebuild from a clean committed HEAD.
 
-   ```bash
-   npx @slkiser/opencode-quota@latest update
-   ```
-
-5. Restart OpenCode.
-6. Run `/quota_status` in OpenCode, or run `opencode-quota status` in a terminal.
-
-The updater preserves unrelated settings, comments, and plugins where targeted editing is safe. Credential findings stay manual, and `--yes` authorizes only safe config/cache work. See [Updating safely](updating.md) for the complete workflow.
+See [Updating safely](updating.md) for the complete local-only workflow.
 
 | Update result | What to do |
 | --- | --- |
-| Obsolete OpenCode Go source | Configure `OPENCODE_API_KEY`, trusted global `provider.opencode-go.options.apiKey`, fallback `provider.opencode.options.apiKey`, or `opencode auth login -p opencode-go`. Verify it, then manually remove the reported old variable/file. Workspace/cookie material cannot become an API key. |
-| Ambiguous OpenCode Zen environment names | Decide whether the names belong to Zen or OpenCode's workspace feature. If they are Zen credentials, create and protect the supported global `opencode-quota/opencode.json` manually. Never paste the values into output or reports. |
-| Unsupported display migration | Fix the reported invalid, duplicate, or ambiguous config manually. Use root `accountingDetail: "summary"` or `"detailed"`; do not share the rejected value. |
-| Update race or partial-write failure | No package cache was deleted. Read the error's exact changed-path list, inspect those files, fix the cause, and rerun `update --dry-run` for a fresh plan. Do not restore over concurrent edits blindly. |
+| Obsolete OpenCode Go source | Review and change it manually in the owning `local-ai` repository. Never paste credential values into output or reports. |
+| Ambiguous OpenCode Zen environment names | Decide whether the names belong to Zen or OpenCode's workspace feature, then handle them manually. |
+| Unsupported display migration | Apply the required config migration manually; the local-only `update` command does not convert it. |
+| Runtime update needed | Review source, create a downstream commit, and rebuild from clean committed HEAD; do not use npm or a remote package. |
 
 ## Provider fixes
 
@@ -129,7 +122,7 @@ Run `/quota_status` and check the Cursor section.
 
 | Symptom                                   | Fix                                                                                                     |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Cursor not detected                       | Put `@playwo/opencode-cursor-oauth` before `@slkiser/opencode-quota` in `opencode.json`.                |
+| Cursor not detected                       | Put `@playwo/opencode-cursor-oauth` before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`.                |
 | Cursor auth missing                       | Run `opencode auth login --provider cursor`.                                                            |
 | Quota appears but no remaining percentage | Set `cursorPlan` or `cursorIncludedApiUsd` in `opencode-quota/quota-toast.json`.                        |
 | Billing cycle looks wrong                 | Set `cursorBillingCycleStartDay` in `opencode-quota/quota-toast.json` to your local billing anchor day. |
@@ -144,7 +137,7 @@ Run `/quota_status` and check `qwen_oauth_source`, `qwen_local_plan`, and the `q
 
 | Symptom              | Fix                                                                                                          |
 | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Qwen not detected    | Put `opencode-qwencode-auth` before `@slkiser/opencode-quota` in `opencode.json`.                            |
+| Qwen not detected    | Put `opencode-qwencode-auth` before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`.                            |
 | Auth missing         | Complete the Qwen companion plugin auth flow.                                                                |
 | Counters do not move | Confirm the current model is `qwen-code/*`; Qwen quota is local request estimation for matching model usage. |
 | Usage looks stale    | Check the local state file path shown by `/quota_status`.                                                    |
@@ -193,7 +186,7 @@ Run `/quota_status` and check the `google_antigravity` section. The toast diagno
 
 | Symptom                  | Fix                                                                                  |
 | ------------------------ | ------------------------------------------------------------------------------------ |
-| Companion missing        | Put `opencode-antigravity-auth` before `@slkiser/opencode-quota` in `opencode.json`. |
+| Companion missing        | Put `opencode-antigravity-auth` before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`. |
 | Accounts not found       | Check the selected `antigravity-accounts.json` path shown by `/quota_status`.        |
 | Refresh tokens invalid   | Re-authenticate with the companion plugin.                                           |
 | Provider returns no rows | Check `live_probe`, `live_entry_*`, and `live_error_*` in `/quota_status`.           |
@@ -207,7 +200,7 @@ Run `/quota_status` and check the `google_agy` section.
 
 | Symptom                             | Fix                                                                                           |
 | ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| Companion missing                   | Put `@anthonyhaussman/opencode-agy-auth` before `@slkiser/opencode-quota` in `opencode.json`. |
+| Companion missing                   | Put `@anthonyhaussman/opencode-agy-auth` before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`. |
 | Provider not enabled in manual mode | Include `google-agy` in `enabledProviders` in `opencode-quota/quota-toast.json`.              |
 | Auth missing                        | Run `opencode auth login --provider google-agy`.                                              |
 | Project missing                     | Set `OPENCODE_AGY_PROJECT_ID` or `provider.google-agy.options.projectId`.                     |
@@ -224,7 +217,7 @@ Run `/quota_status` and check the Gemini CLI live probe rows.
 
 | Symptom                             | Fix                                                                                                                          |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Companion missing                   | Put `opencode-gemini-auth` before `@slkiser/opencode-quota` in `opencode.json`.                                              |
+| Companion missing                   | Put `opencode-gemini-auth` before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`.                                              |
 | Provider not enabled in manual mode | Include `google-gemini-cli` in `enabledProviders` in `opencode-quota/quota-toast.json`.                                      |
 | Auth missing                        | Run `opencode auth login --provider google`.                                                                                 |
 | Project missing                     | Set `provider.google.options.projectId`, `OPENCODE_GEMINI_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`, or `GOOGLE_CLOUD_PROJECT_ID`. |

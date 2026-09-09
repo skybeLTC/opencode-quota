@@ -116,7 +116,7 @@ Custom providers can report quota, rate limit, usage, spend, budget, balance, or
 Run the guided setup:
 
 ```bash
-npx @slkiser/opencode-quota@latest provider add
+opencode-quota provider add
 ```
 
 It asks only how the provider works, previews the exact global config change, and asks before writing. It does not ask for a response body, credential, or secret value.
@@ -393,7 +393,7 @@ When Claude Code does not expose quota windows itself, quota is read from Anthro
 
 ### Cursor
 
-Use companion plugin [`@playwo/opencode-cursor-oauth`](https://github.com/PoolPirate/opencode-cursor#readme). Add it before `@slkiser/opencode-quota` in `opencode.json`, then authenticate once:
+Use companion plugin [`@playwo/opencode-cursor-oauth`](https://github.com/PoolPirate/opencode-cursor#readme). Add it before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`, then authenticate once:
 
 ```bash
 opencode auth login --provider cursor
@@ -405,7 +405,7 @@ Cursor estimates the current local billing cycle from OpenCode history. With com
 
 ### Qwen Code
 
-Use companion plugin [`opencode-qwencode-auth`](https://github.com/gustavodiasdev/opencode-qwencode-auth#readme). Add it before `@slkiser/opencode-quota` in `opencode.json`.
+Use companion plugin [`opencode-qwencode-auth`](https://github.com/gustavodiasdev/opencode-qwencode-auth#readme). Add it before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`.
 
 OpenCode Quota's Google integrations use independent community companion plugins. They are not endorsed by Google.
 
@@ -413,13 +413,13 @@ OpenCode Quota's Google integrations use independent community companion plugins
 
 ### Google Antigravity
 
-Use companion plugin [`opencode-antigravity-auth`](https://github.com/NoeFabris/opencode-antigravity-auth#readme). Add it before `@slkiser/opencode-quota` in `opencode.json`.
+Use companion plugin [`opencode-antigravity-auth`](https://github.com/NoeFabris/opencode-antigravity-auth#readme). Add it before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`.
 
 <a id="google-agy-quick-setup"></a>
 
 ### Google AGY
 
-Use companion plugin [`@anthonyhaussman/opencode-agy-auth`](https://github.com/anthonyhaussman/opencode-agy-auth). Add it before `@slkiser/opencode-quota` in `opencode.json`, then authenticate Google once:
+Use companion plugin [`@anthonyhaussman/opencode-agy-auth`](https://github.com/anthonyhaussman/opencode-agy-auth). Add it before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`, then authenticate Google once:
 
 Google AGY reports the companion's grouped weekly and five-hour quota windows for each account.
 
@@ -459,7 +459,7 @@ Google's official Antigravity CLI replaces the individual Gemini CLI experience.
 
 The instructions below remain available only to maintain an existing setup.
 
-Use companion plugin [`opencode-gemini-auth`](https://github.com/jenslys/opencode-gemini-auth#readme). Add it before `@slkiser/opencode-quota` in `opencode.json`, then authenticate Google once:
+Use companion plugin [`opencode-gemini-auth`](https://github.com/jenslys/opencode-gemini-auth#readme). Add it before `{env:HOME}/local-ai/opencode-satellites/opencode-quota` in `opencode.json`, then authenticate Google once:
 
 ```bash
 opencode auth login --provider google
@@ -590,7 +590,7 @@ OpenCode Go reads subscription quota from the official `https://opencode.ai/zen/
 
 Project-local `opencode.json` and `opencode.jsonc` files are not read for this secret. Use `opencodeGoWindows` to choose which validated API results appear across surfaces and in the expanded sidebar: **Five-hour**, **Weekly**, and/or **Monthly**. To keep those rows expanded but prefer one while the sidebar is collapsed, set `tuiSidebarPanel.opencodeGoPreferredWindow` to `rolling`, `weekly`, or `monthly`; an unset or unavailable preference keeps the lowest-remaining selection. These settings do not change authentication or the API request.
 
-The updater reports obsolete `OPENCODE_GO_WORKSPACE_ID`, `OPENCODE_GO_AUTH_COOKIE`, and global `opencode-quota/opencode-go.json` sources without reading their values or contents. Workspace/cookie material cannot be converted into the official API key. Configure and verify a supported key before removing those sources manually; see [Updating safely](updating.md#opencode-go-findings).
+The local-only `update` command does not inspect or remove obsolete `OPENCODE_GO_WORKSPACE_ID`, `OPENCODE_GO_AUTH_COOKIE`, or global `opencode-quota/opencode-go.json` sources. Workspace/cookie material cannot be converted into the official API key. Configure and verify a supported key before removing those sources manually; see [Updating safely](updating.md).
 
 <a id="opencode-zen"></a>
 
@@ -609,10 +609,10 @@ Find both values in your browser: the workspace ID is in the billing-page URL, a
 
 > The credentials are read only from this config file. They are not read from
 > the `OPENCODE_WORKSPACE_ID` / `OPENCODE_AUTH_COOKIE` environment variables,
-> which collide with the OpenCode client's workspace feature. The updater may
-> cautiously report those names when no supported global file exists; review
-> [Updating safely](updating.md#opencode-zen-findings) before changing them.
+> which collide with the OpenCode client's workspace feature. The local-only
+> `update` command does not inspect or change those names; review [Updating safely](updating.md)
+> before changing them.
 
 Set `opencodeMonthlyLimit` in `opencode-quota/quota-toast.json` to override the monthly budget from the billing page. With valid monthly usage and a positive page/configured limit, Zen shows a primary **Monthly budget** percentage with used, limit, and locally derived remaining USD facts. The current account balance is separate and supplementary; without a valid budget percentage, that balance becomes the primary row. **Auto-reload** is a supplementary enabled/disabled row. Its raw amount and trigger remain diagnostics because their monetary units are not confirmed.
 
-Use root `accountingDetail: "detailed"` to admit the supplementary balance and auto-reload rows. At runtime, the removed `opencodeZenDisplay` key remains diagnostic-only. The explicit `update` command can migrate recognized file-backed `default` and `detailed` values; unsupported cases remain unchanged for manual review. See [Updating safely](updating.md#what-can-change-automatically).
+Use root `accountingDetail: "detailed"` to admit the supplementary balance and auto-reload rows. At runtime, the removed `opencodeZenDisplay` key remains diagnostic-only. The local-only `update` command does not migrate it; manually set root `accountingDetail` and remove the old key. Unsupported cases remain unchanged for manual review. See [Updating safely](updating.md).

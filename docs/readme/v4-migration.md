@@ -2,7 +2,8 @@
 
 # Move from v3 to v4
 
-v4 adds clearer quota results, guided custom-provider setup, and JSON export v2. The updater keeps unrelated OpenCode settings.
+v4 adds clearer quota results, guided custom-provider setup, and JSON export v2. This document is a
+historical migration reference; the local-only downstream `update` command does not perform migration.
 
 ## Requirements
 
@@ -19,20 +20,16 @@ v4 adds clearer quota results, guided custom-provider setup, and JSON export v2.
 3. If another app reads `opencode-quota show --json` or `quota-export.json`, review [JSON export v2](external-integration.md#json-basics).
 4. Keep provider credentials in OpenCode authentication, global config, or environment variables—not project quota settings.
 
-## Update
+## Update boundary in this downstream
 
-Preview the changes first:
-
-```bash
-npx @slkiser/opencode-quota@latest update --dry-run
-```
-
-If the preview looks right, apply them:
+The local-only build does not install from npm or automatically migrate an upstream installation.
+`update` is informational-only:
 
 ```bash
-npx @slkiser/opencode-quota@latest update
+opencode-quota update
 ```
 
+Review and apply any config or cache migration manually in the owning `local-ai` repository.
 Restart OpenCode, then run `/quota` and `/quota_status`.
 
 ## What may need your attention
@@ -44,7 +41,7 @@ v4 replaces the old `customSources` setting with `quotaProviders`. The old setti
 Use the guided command to add each custom provider:
 
 ```bash
-npx @slkiser/opencode-quota@latest provider add
+opencode-quota provider add
 ```
 
 It previews the exact global config change and asks before writing. See the [Provider setup guide](providers.md#custom-providers) for full details.
@@ -76,7 +73,9 @@ After restarting OpenCode:
 3. If enabled, check the TUI sidebar, toast, and compact line.
 4. If you added a custom provider, confirm its row appears. One failed provider should not hide successful providers.
 
-## Roll back to v3
+## Roll back an upstream npm installation to v3
+
+The following steps apply only to an upstream npm installation. They do not describe the local-ai managed deployment.
 
 1. Close OpenCode.
 2. Restore the config backup you made before updating.
@@ -84,4 +83,6 @@ After restarting OpenCode:
 4. Remove v4 `quotaProviders` entries because v3 does not understand them.
 5. Restart OpenCode and run `/quota`.
 
-v3 does not read v4 cache or custom-provider state. OpenCode Quota can recreate those files if you return to v4.
+For this local-only downstream, keep `{env:HOME}/local-ai/opencode-satellites/opencode-quota` as the plugin spec; do not replace it with an npm v3 package. Rollback is managed by `local-ai`: use its deployment workflow to select the desired revision, rebuild it, and verify the resulting local deployment. This repository's `opencode-quota update` command is informational-only and does not perform rollback or migration.
+
+An upstream v3 installation does not read v4 cache or custom-provider state. OpenCode Quota can recreate those files if you return to an upstream v4 installation.

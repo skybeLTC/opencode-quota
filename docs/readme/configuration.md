@@ -36,7 +36,7 @@ Strict `.json` files also work. Run `/quota_status` if you are unsure which file
 | Show or hide session input/output tokens   | `showSessionTokens`           |
 | Include descendant/subagent session tokens | `sessionTokenScope: "tree"`   |
 
-The installer chooses `allWindows` by default. If the setting is absent, the built-in default is `singleWindow`.
+This local-only build has no installer: `opencode-quota init` is disabled and does not choose or write a format setting. If the setting is absent, the built-in default is `singleWindow`.
 
 ### Example
 
@@ -125,7 +125,7 @@ A custom provider connects OpenCode Quota to a provider that is not built in, or
 Use the guided command:
 
 ```bash
-npx @slkiser/opencode-quota@latest provider add
+opencode-quota provider add
 ```
 
 It asks what kind of provider you have, previews the complete canonical merged global config, and asks before writing. It never asks for a response body, credential, or secret value. For `json-v1`, it guides you through the optional rows path and each mapping one field at a time. The same schema validator used at startup checks the constructed adapter before the preview.
@@ -320,10 +320,12 @@ See [External integration](external-integration.md).
 <summary><strong>Advanced: also write the older OpenCode settings block</strong></summary>
 
 ```bash
-npx @slkiser/opencode-quota init --sync-legacy-config
+opencode-quota init --sync-legacy-config
 ```
 
-Use this only if another tool needs `experimental.quotaToast` mirrored into `opencode.jsonc` or `.json`.
+This command is disabled in the local-only downstream build. If another tool needs
+`experimental.quotaToast` mirrored into `opencode.jsonc` or `.json`, make that change manually in
+the owning `local-ai` repository.
 
 </details>
 
@@ -415,7 +417,7 @@ OpenCode Go has no `quota-toast.json` workspace ID, cookie, endpoint, credential
 
 Xiaomi MiMo has no `quota-toast.json` credential or endpoint setting. Use `MIMO_USAGE_COOKIE` or trusted user/global `opencode-quota/mimo.json`; see [Xiaomi MiMo setup](providers.md#xiaomi-mimo).
 
-**Removed Zen setting:** `opencodeZenDisplay` is no longer supported. Runtime loading stays diagnostic-only: if a file-backed, SDK, or legacy config source contains the key, `/quota_status` reports a nonfatal migration issue and does not translate it. The explicit `update` command migrates recognized file-backed `"default"` to root `accountingDetail: "summary"` and `"detailed"` to `"detailed"`. If a valid `accountingDetail` already exists, it stays authoritative and the ignored old key is removed. Unknown or invalid values, invalid replacements, duplicate keys, ambiguous structures, and SDK-only sources remain unchanged for manual review. See [Updating safely](updating.md#what-can-change-automatically).
+**Removed Zen setting:** `opencodeZenDisplay` is no longer supported. Runtime loading stays diagnostic-only: if a file-backed, SDK, or legacy config source contains the key, `/quota_status` reports a nonfatal migration issue and does not translate it. This local-only build's `update` command does not translate or remove the key. Manually map file-backed `"default"` to root `accountingDetail: "summary"` and `"detailed"` to `"detailed"`; if a valid `accountingDetail` already exists, keep it authoritative and remove the old key manually. Unknown or invalid values, invalid replacements, duplicate keys, ambiguous structures, and SDK-only sources remain unchanged for manual review. See [Updating safely](updating.md).
 
 ### Export settings
 
