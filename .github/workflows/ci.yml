@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["sky/v*"]
   pull_request:
 
 jobs:
