@@ -1,4 +1,16 @@
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
+
+function clearOpenCodeConfigEnv(): void {
+  delete process.env.OPENCODE_CONFIG;
+  delete process.env.OPENCODE_CONFIG_DIR;
+}
+
+clearOpenCodeConfigEnv();
+
+beforeEach(() => {
+  vi.unstubAllEnvs();
+  clearOpenCodeConfigEnv();
+});
 
 afterEach(async () => {
   try {
