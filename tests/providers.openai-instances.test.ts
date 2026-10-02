@@ -48,7 +48,7 @@ vi.mock("../src/lib/opencode-runtime-paths.js", () => ({
 }));
 
 import { createLoadConfigMeta, loadConfig } from "../src/lib/config.js";
-import type { QuotaProvider } from "../src/lib/entries.js";
+import type { QuotaProvider, QuotaProviderContext } from "../src/lib/entries.js";
 import { resolveQuotaRuntimeContext } from "../src/lib/quota-runtime-context.js";
 import {
   createRuntimeProviderResolvers,
@@ -98,18 +98,18 @@ function usageResponse(planType: string, usedPercent: number) {
 
 /** Routes each request to a plan/usage pair keyed by the exact bearer token. */
 function stubUsageByBearerToken(usageByToken: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (_url: string, init: any) => {
-    const authorization = String(init?.headers?.Authorization ?? "");
+  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+    const authorization = new Headers(init?.headers).get("Authorization") ?? "";
     const token = authorization.replace(/^Bearer /u, "");
     const usage = usageByToken[token];
     if (!usage) return { ok: false, status: 401 };
     return { ok: true, json: async () => usage };
   });
-  vi.stubGlobal("fetch", fetchMock as any);
+  vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
-function createProviderContext() {
+function createProviderContext(): QuotaProviderContext {
   return {
     client: {
       config: {
@@ -124,7 +124,7 @@ function createProviderContext() {
       onlyCurrentModel: false,
       enabledProviders: "auto",
     },
-  } as any;
+  };
 }
 
 describe("inherited OpenAI provider instances", () => {
@@ -235,10 +235,9 @@ describe("inherited OpenAI provider instances", () => {
     const result = await instance.fetch(createProviderContext());
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String((fetchMock.mock.calls[0]![1] as any).headers.Authorization)).toBe(
-      `Bearer ${entry.access}`,
-    );
-    expect((fetchMock.mock.calls[0]![1] as any).headers["ChatGPT-Account-Id"]).toBe("acct-work");
+    const requestHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(requestHeaders.get("Authorization")).toBe(`Bearer ${entry.access}`);
+    expect(requestHeaders.get("ChatGPT-Account-Id")).toBe("acct-work");
     expect(result.attempted).toBe(true);
     expect(result.entries[0]?.group).toBe("OpenAI (Plus) (openai-Work)");
     expect(result.presentation?.singleWindowDisplayName).toBe("OpenAI (Plus) (openai-Work)");
@@ -285,8 +284,8 @@ describe("inherited OpenAI provider instances", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(workResult.entries[0]?.group).toBe("OpenAI (Plus) (openai-Work)");
     expect(personalResult.entries[0]?.group).toBe("OpenAI (Pro) (openai-Personal)");
-    expect((workResult.entries[0] as any).percentRemaining).toBe(60);
-    expect((personalResult.entries[0] as any).percentRemaining).toBe(90);
+    expect(workResult.entries[0]).toMatchObject({ percentRemaining: 60 });
+    expect(personalResult.entries[0]).toMatchObject({ percentRemaining: 90 });
 
     // Cached: each instance resolves from its own cache entry, no new requests.
     const workCached = await fetchQuotaProviderResult({ provider: work, ctx, ttlMs: 60_000 });
@@ -340,7 +339,7 @@ describe("inherited OpenAI provider instances", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(second.entries[0]?.group).toBe("OpenAI (Pro) (openai-Work)");
-    expect((second.entries[0] as any).percentRemaining).toBe(90);
+    expect(second.entries[0]).toMatchObject({ percentRemaining: 90 });
   });
 });
 
